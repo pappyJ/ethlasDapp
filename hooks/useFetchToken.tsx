@@ -1,39 +1,10 @@
 /* eslint-disable react-hooks/rules-of-hooks */
-'use client';
-import { ContextProvider } from '@/lib/ContextProvider';
-import vaultAbi from '@/lib/contractAbi';
-import { ethers } from 'ethers';
-import { useContext, useEffect } from 'react';
-import { formatUnits } from 'viem';
-import { useAccount, useChainId, useReadContracts } from 'wagmi';
-
-const list: any[] = [];
-
-// Connect to the Ethereum network
-const provider = new ethers.BrowserProvider(window.ethereum);
-
-// Define the contract address and the event signature
-const contractAddress =  `0x${process.env.NEXT_PUBLIC_CONTRACT_ADDRESS}`;
-
-// Create a contract instance
-const contract = new ethers.Contract(contractAddress!, vaultAbi, provider);
-
-// Retrieve all TokenAllowed events since contract creation
-contract
-  .queryFilter('TokenAllowed', 0, 'latest')
-  .then((events: any[]) => {
-    events.map((event: any) => {
-      list.push({
-        name: event.args[3],
-        address: event.args[0],
-        allowed: event.args[1],
-        decimal: Number(event.args[2]),
-      });
-    });
-  })
-  .catch((error: any) => {
-    console.error(error);
-  });
+"use client";
+import vaultAbi from "@/lib/contractAbi";
+import { ethers } from "ethers";
+import { useEffect, useState } from "react";
+import { formatUnits } from "viem";
+import { useAccount, useReadContracts } from "wagmi";
 
 interface Contract {
   tokenBalance?: string | undefined;
@@ -45,9 +16,30 @@ interface Contract {
 }
 
 export default function useFetchToken() {
-  const { tokens, setTokens } = useContext(ContextProvider);
+  const [list, setList] = useState<any[]>([]);
 
-  const chainId = useChainId();
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const contractAddress = `0x${process.env.NEXT_PUBLIC_CONTRACT_ADDRESS}`;
+      const contract = new ethers.Contract(contractAddress, vaultAbi, provider);
+
+      contract
+        .queryFilter("TokenAllowed", 0, "latest")
+        .then((events: any[]) => {
+          const list: Contract[] = events.map((event: any) => ({
+            name: event.args[3],
+            address: event.args[0],
+            allowed: event.args[1],
+            decimal: Number(event.args[2]),
+          }));
+          setList(list);
+        })
+        .catch((error: any) => {
+          console.error(error);
+        });
+    }
+  }, []);
 
   const account = useAccount();
 
@@ -56,23 +48,22 @@ export default function useFetchToken() {
     abi: vaultAbi,
   };
 
-  const { data, dataUpdatedAt, isFetching, isSuccess } = useReadContracts<any>({
+  const { data, dataUpdatedAt } = useReadContracts<any>({
     contracts: list.flatMap((asset) => [
       {
         ...vaultStruct,
-        functionName: 'getTotalDeposits',
+        functionName: "getTotalDeposits",
         args: [asset.address],
       },
       {
         ...vaultStruct,
-        functionName: 'getDepositInfo',
+        functionName: "getDepositInfo",
         args: [account.address, asset.address],
       },
     ]),
   });
 
   const tokenBucket: Contract[] = [];
-
 
   list.forEach((asset, index) => {
     if (dataUpdatedAt) {
@@ -96,10 +87,6 @@ export default function useFetchToken() {
       });
     }
   });
-//   useEffect(() => {
-//     setTokens(tokenBucket);
-    
-//   }, []);
   return {
     tokens: tokenBucket,
   };
